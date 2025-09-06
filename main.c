@@ -70,15 +70,12 @@ void* HablarConPresidentes(void* arg) {
 int id = *(int*)arg;
 sem_wait(&sem_HablarConPresidentess); // Solo un presidente a la vez
 hablarConComandanteExtraterrestre(id);
-
-pthread_mutex_lock(&mutex); 
 PresidentesYaHablados++;
 if (PresidentesYaHablados == 10) {
     for (int i = 0; i < N_DESTRUCTORES; i++)
         sem_post(&sem_ComenzarInvadirCiudades);  // una vez que todos los presidentes hablaron doy permiso a las naves
 }
 sem_post(&sem_HablarConPresidentess); // libero el semáforo para el siguiente presidente
-pthread_mutex_unlock(&mutex);
 
 return NULL;
 }
@@ -90,24 +87,25 @@ tomarPosicionEnMegaCiudad(id);
 
 pthread_mutex_lock(&mutex);     // inicio sección crítica para que dea  uno modifique el contador
 naves_posicionadas++;
+pthread_mutex_unlock(&mutex);
 if (naves_posicionadas == N_DESTRUCTORES) {     // si todas las naves se posicionaron ataco
 for (int i = 0; i < N_DESTRUCTORES; i++)
 sem_post(&sem_NavesAtacan); // Permitir que las naves ataquen
 }
-pthread_mutex_unlock(&mutex);
+
 
 sem_wait(&sem_NavesAtacan);
 atacarMegaciudad(id);
 
 pthread_mutex_lock(&mutex);             // inicio sección crítica para que dea  uno modifique el contador
 naves_atacaron++;
+pthread_mutex_unlock(&mutex);
 if (naves_atacaron == N_DESTRUCTORES) { // si ya se ataco a todas las ciudades 
 for (int i = 0; i < N_DESTRUCTORES; i++)
 sem_post(&sem_CiudadSeDefiende); // Permitir que las ciudades se defiendan
 }
-pthread_mutex_unlock(&mutex);
 
-sem_wait(&sem_EvacuarPlaneta);
+sem_wait(&sem_EvacuarPlaneta);      //espera a semaforo de que la nave nodriza descendia y de el permiso  para evacuar el planeta 
 //printf("Nave destructora %d ", id);
 abandonarTierra(id);
 return NULL;
@@ -115,31 +113,30 @@ return NULL;
 
 void* ciudad(void* arg) {
 int id = *(int*)arg;
-sem_wait(&sem_CiudadSeDefiende);
+sem_wait(&sem_CiudadSeDefiende);        //espera a que todas las naves ataquen para que las ciudades se defiendan
 
 iniciarProtocoloDefensivo(id);
 contraatacarNaves(id);
 perderBatalla(id);
 
-pthread_mutex_lock(&mutex);
+pthread_mutex_lock(&mutex);     // inicio sección crítica para que de a uno modifique el contador
 ciudades_defendidas++;
-if (ciudades_defendidas == N_DESTRUCTORES) {
+pthread_mutex_unlock(&mutex);
+if (ciudades_defendidas == N_DESTRUCTORES) {    // si todas las ciudades fueron defendidas
 sem_post(&sem_NodrizaDesciende); // Permitir que la nave nodriza descienda
 }
-pthread_mutex_unlock(&mutex);
-
 return NULL;
 }
 
 
 void* naveNodriza(void* arg) {
-sem_wait(&sem_NodrizaDesciende);
+sem_wait(&sem_NodrizaDesciende);            //espera a semafoto de que las ciudades fueron defendidas para descender
 descenderATierra();
 abrirCompuertas();
 
 //libera a todas las naves
 for (int i = 0; i < N_DESTRUCTORES; i++){
-sem_post(&sem_EvacuarPlaneta); 
+sem_post(&sem_EvacuarPlaneta);          //liberar las 33 naves
 }
 
 
@@ -165,10 +162,8 @@ sem_init(&sem_EvacuarPlaneta, 0, 0);
 for(int i=0; i<10; i++) {
 id_pres[i] = i+1;
 pthread_create(&HablarConPresidentess[i], NULL, HablarConPresidentes, &id_pres[i]);
-}
-for(int i=0; i<10; i++) { 
 pthread_join(HablarConPresidentess[i],NULL);
-} // join afuera asi cada presidente no espera 
+}                   //asi habla de  un solo presidente por ves
 
 // Crea hilos destructores y ciudades
 for(int i=0; i <N_DESTRUCTORES;i++){
@@ -186,9 +181,13 @@ for(int i=0; i<N_DESTRUCTORES;i++) pthread_join(destructores[i],NULL);
 for(int i=0; i<N_DESTRUCTORES;i++) pthread_join(ciudades[i],NULL);
 pthread_join(nodriza, NULL);
 
-// Abandonar planeta
-//sem_wait(&sem_EvacuarPlaneta);
-//abandonarTierra();
-
+//Destruir hilos y mutex 
+pthread_mutex_destroy(&mutex);
+sem_destroy(&sem_HablarConPresidentess);
+sem_destroy(&sem_ComenzarInvadirCiudades);
+sem_destroy(&sem_NavesAtacan);
+sem_destroy(&sem_CiudadSeDefiende);
+sem_destroy(&sem_NodrizaDesciende);
+sem_destroy(&sem_EvacuarPlaneta);
 return 0;
 }
