@@ -56,14 +56,13 @@ printf(" La nave nodriza desciende a la Tierra\n");
 sleep(1);
 }
 void abrirCompuertas() {
-printf(" La nave nodriza abre compuertas,y comienza a matar a los extraterrestres\n");
+printf(" La nave nodriza abre compuertas, un extranio polvillo entra junto con el aire (polen) y empiezan a morir los extraterrestres\n");
 sleep(1);
 }
-void abandonarTierra() {
-printf(" Las naves evacuan y abandonan la Tierra\n");
+void abandonarTierra(int id) {
+printf(" La nave %d evacua y abandona la Tierra, tras la orden dada por el comandante.\n", id);
 sleep(1);
 }
-
 
 // funciones para los hilos
 
@@ -71,12 +70,16 @@ void* HablarConPresidentes(void* arg) {
 int id = *(int*)arg;
 sem_wait(&sem_HablarConPresidentess); // Solo un presidente a la vez
 hablarConComandanteExtraterrestre(id);
+
+pthread_mutex_lock(&mutex); 
 PresidentesYaHablados++;
 if (PresidentesYaHablados == 10) {
     for (int i = 0; i < N_DESTRUCTORES; i++)
         sem_post(&sem_ComenzarInvadirCiudades);  // una vez que todos los presidentes hablaron doy permiso a las naves
 }
 sem_post(&sem_HablarConPresidentess); // libero el semáforo para el siguiente presidente
+pthread_mutex_unlock(&mutex);
+
 return NULL;
 }
 
@@ -104,6 +107,9 @@ sem_post(&sem_CiudadSeDefiende); // Permitir que las ciudades se defiendan
 }
 pthread_mutex_unlock(&mutex);
 
+sem_wait(&sem_EvacuarPlaneta);
+//printf("Nave destructora %d ", id);
+abandonarTierra(id);
 return NULL;
 }
 
@@ -125,13 +131,22 @@ pthread_mutex_unlock(&mutex);
 return NULL;
 }
 
+
 void* naveNodriza(void* arg) {
 sem_wait(&sem_NodrizaDesciende);
 descenderATierra();
 abrirCompuertas();
-sem_post(&sem_EvacuarPlaneta);
+
+//libera a todas las naves
+for (int i = 0; i < N_DESTRUCTORES; i++){
+sem_post(&sem_EvacuarPlaneta); 
+}
+
+
 return NULL;
 }
+
+
 // Programa
 int main() {
 pthread_t HablarConPresidentess[10], destructores[N_DESTRUCTORES], ciudades[N_DESTRUCTORES], nodriza;
@@ -145,12 +160,15 @@ sem_init(&sem_CiudadSeDefiende, 0, 0);
 sem_init(&sem_NodrizaDesciende, 0, 0);
 sem_init(&sem_EvacuarPlaneta, 0, 0);
 
+
 // Crea hilo para hablar con presidentes
 for(int i=0; i<10; i++) {
 id_pres[i] = i+1;
 pthread_create(&HablarConPresidentess[i], NULL, HablarConPresidentes, &id_pres[i]);
-pthread_join(HablarConPresidentess[i],NULL);
 }
+for(int i=0; i<10; i++) { 
+pthread_join(HablarConPresidentess[i],NULL);
+} // join afuera asi cada presidente no espera 
 
 // Crea hilos destructores y ciudades
 for(int i=0; i <N_DESTRUCTORES;i++){
@@ -169,8 +187,8 @@ for(int i=0; i<N_DESTRUCTORES;i++) pthread_join(ciudades[i],NULL);
 pthread_join(nodriza, NULL);
 
 // Abandonar planeta
-sem_wait(&sem_EvacuarPlaneta);
-abandonarTierra();
+//sem_wait(&sem_EvacuarPlaneta);
+//abandonarTierra();
 
 return 0;
 }
